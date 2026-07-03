@@ -89,6 +89,7 @@
 
       #smokeCanvas {
         z-index: 1;
+        touch-action: none;
       }
 
       .map-linework {
@@ -592,6 +593,8 @@
       const controlPanel = document.querySelector("#controlPanel");
       const panelToggle = document.querySelector("#panelToggle");
       const PANEL_REVEAL_ZONE = 96;
+      const LONG_PRESS_PAN_MS = 360;
+      const CLICK_MOVE_TOLERANCE = 10;
       const touchPanelQuery = window.matchMedia("(max-width: 720px), (hover: none), (pointer: coarse)");
       const controls = {
         smokeSize: document.querySelector("#smokeSize"),
@@ -620,6 +623,7 @@
       let smokeHotspots = [];
       let lastTime = performance.now();
       let isPanning = false;
+      let primaryPress = null;
       const camera = { x: 0, y: 0 };
       const panStart = { x: 0, y: 0, cameraX: 0, cameraY: 0 };
       const MAX_PARTICLES = 760;
@@ -1190,6 +1194,79 @@
         document.body.classList.remove("is-panning");
       }
 
+      function clearPrimaryPressTimer() {
+        if (primaryPress?.timer) {
+          window.clearTimeout(primaryPress.timer);
+          primaryPress.timer = null;
+        }
+      }
+
+      function startLongPressPan() {
+        if (!primaryPress || primaryPress.longPressed) {
+          return;
+        }
+
+        primaryPress.longPressed = true;
+        startPanning({
+          clientX: primaryPress.lastX,
+          clientY: primaryPress.lastY,
+          preventDefault() {},
+        });
+      }
+
+      function beginPrimaryPress(event) {
+        const point = pointerPosition(event);
+        primaryPress = {
+          pointerId: event.pointerId,
+          startX: point.x,
+          startY: point.y,
+          lastX: point.x,
+          lastY: point.y,
+          moved: false,
+          longPressed: false,
+          worldPoint: screenToWorld(point),
+          timer: window.setTimeout(startLongPressPan, LONG_PRESS_PAN_MS),
+        };
+      }
+
+      function updatePrimaryPress(event) {
+        if (!primaryPress || primaryPress.pointerId !== event.pointerId) {
+          return;
+        }
+
+        const point = pointerPosition(event);
+        primaryPress.lastX = point.x;
+        primaryPress.lastY = point.y;
+        const distance = Math.hypot(point.x - primaryPress.startX, point.y - primaryPress.startY);
+        if (distance > CLICK_MOVE_TOLERANCE) {
+          primaryPress.moved = true;
+        }
+      }
+
+      function finishPrimaryPress(event) {
+        if (!primaryPress || primaryPress.pointerId !== event.pointerId) {
+          return false;
+        }
+
+        const press = primaryPress;
+        clearPrimaryPressTimer();
+        primaryPress = null;
+
+        if (press.longPressed || isPanning || press.moved) {
+          stopPanning();
+          return true;
+        }
+
+        createSmoke(press.worldPoint.x, press.worldPoint.y);
+        return true;
+      }
+
+      function cancelPrimaryPress() {
+        clearPrimaryPressTimer();
+        primaryPress = null;
+        stopPanning();
+      }
+
       function updateControlValues(source = "slider") {
         smokeSettings.size = Number(controls.smokeSize.value) / 100;
         smokeSettings.density = Number(controls.smokeDensity.value) / 100;
@@ -1216,6 +1293,11 @@
       window.addEventListener("resize", resize);
       window.addEventListener("auxclick", (event) => {
         if (event.button === 1) {
+          event.preventDefault();
+        }
+      });
+      window.addEventListener("contextmenu", (event) => {
+        if (!controlPanel.contains(event.target)) {
           event.preventDefault();
         }
       });
@@ -1305,6 +1387,7 @@
       });
       window.addEventListener("pointerdown", (event) => {
         if (event.button === 1) {
+          cancelPrimaryPress();
           startPanning(event);
           return;
         }
@@ -1313,13 +1396,17 @@
           return;
         }
 
-        const point = pointerPosition(event);
-        const worldPoint = screenToWorld(point);
-        createSmoke(worldPoint.x, worldPoint.y);
+        beginPrimaryPress(event);
       });
-      window.addEventListener("pointermove", updatePanning);
-      window.addEventListener("pointerup", stopPanning);
-      window.addEventListener("pointercancel", stopPanning);
+      window.addEventListener("pointermove", (event) => {
+        updatePrimaryPress(event);
+        updatePanning(event);
+      });
+      window.addEventListener("pointerup", (event) => {
+        finishPrimaryPress(event);
+        stopPanning();
+      });
+      window.addEventListener("pointercancel", cancelPrimaryPress);
 
       resize();
       applyCamera();
