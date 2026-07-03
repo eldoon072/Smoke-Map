@@ -1,0 +1,1382 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Smoke Click Prototype</title>
+    <style>
+      :root {
+        --paper: #f6fbff;
+        --paper-soft: rgba(246, 251, 255, 0.72);
+        --paper-faint: rgba(246, 251, 255, 0.42);
+        --panel: rgba(9, 14, 24, 0.54);
+        --panel-core: rgba(15, 23, 42, 0.48);
+        --hairline: rgba(196, 232, 255, 0.18);
+        --hairline-strong: rgba(205, 245, 255, 0.38);
+        --lumen: #a7e8ff;
+        --aqua: #8be9ff;
+        --iris: #d8b4ff;
+        --mint: #a7f3d0;
+        --rose: #f0abfc;
+        --ink: #03060d;
+        --motion: cubic-bezier(0.16, 1, 0.3, 1);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+      }
+
+      body {
+        margin: 0;
+        overflow: hidden;
+        color: var(--paper);
+        background:
+          linear-gradient(120deg, rgba(139, 233, 255, 0.12), transparent 30%),
+          linear-gradient(238deg, rgba(216, 180, 254, 0.13), transparent 35%),
+          linear-gradient(168deg, rgba(167, 243, 208, 0.06), transparent 44%),
+          linear-gradient(145deg, #02040a 0%, #07111f 44%, #03060d 100%);
+        font-family:
+          "Plus Jakarta Sans",
+          "Geist",
+          "Noto Serif SC",
+          "Microsoft YaHei",
+          sans-serif;
+        color-scheme: dark;
+        cursor: crosshair;
+        user-select: none;
+      }
+
+      body.is-panning {
+        cursor: grabbing;
+      }
+
+      body::before {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        content: "";
+        opacity: 0.62;
+        background:
+          linear-gradient(92deg, transparent 0%, rgba(139, 233, 255, 0.13) 18%, transparent 38%),
+          linear-gradient(142deg, transparent 9%, rgba(216, 180, 254, 0.12) 45%, transparent 70%),
+          conic-gradient(from 210deg at 50% 50%, rgba(167, 243, 208, 0.09), transparent 18%, rgba(240, 171, 252, 0.1), transparent 52%, rgba(139, 233, 255, 0.08), transparent);
+        filter: blur(26px) saturate(150%);
+        mix-blend-mode: screen;
+        transform: translate3d(0, 0, 0) scale(1.08);
+        animation: liquidShift 18s var(--motion) infinite alternate;
+      }
+
+      body::after {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        content: "";
+        opacity: 0.28;
+        background:
+          linear-gradient(rgba(246, 251, 255, 0.018) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(139, 233, 255, 0.012) 1px, transparent 1px),
+          repeating-linear-gradient(9deg, rgba(246, 251, 255, 0.014) 0 1px, transparent 1px 7px);
+        background-size: 64px 64px, 64px 64px, auto;
+        mask-image: radial-gradient(circle at center, black, transparent 78%);
+        mix-blend-mode: screen;
+      }
+
+      canvas {
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+
+      #mapCanvas {
+        z-index: 0;
+        pointer-events: none;
+      }
+
+      #smokeCanvas {
+        z-index: 1;
+      }
+
+      .map-linework {
+        display: none;
+        position: fixed;
+        inset: -8vh -8vw;
+        z-index: 0;
+        width: 116vw;
+        height: 116vh;
+        pointer-events: none;
+        opacity: 0.52;
+        filter: drop-shadow(0 0 14px rgba(160, 170, 150, 0.08));
+        will-change: transform;
+      }
+
+      .map-linework .artery {
+        fill: none;
+        stroke: rgba(168, 174, 158, 0.2);
+        stroke-width: 18;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      .map-linework .road {
+        fill: none;
+        stroke: rgba(185, 190, 174, 0.16);
+        stroke-width: 7;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      .map-linework .lane {
+        fill: none;
+        stroke: rgba(202, 205, 190, 0.12);
+        stroke-width: 2.4;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      .map-linework .block {
+        fill: rgba(255, 255, 255, 0.012);
+        stroke: rgba(198, 204, 189, 0.11);
+        stroke-width: 2;
+      }
+
+      .title {
+        position: fixed;
+        top: 40px;
+        left: 48px;
+        z-index: 2;
+        max-width: min(560px, calc(100vw - 96px));
+        pointer-events: none;
+        animation: revealLift 900ms var(--motion) both;
+      }
+
+      .title h1 {
+        margin: 0;
+        max-width: 11ch;
+        color: transparent;
+        background:
+          linear-gradient(100deg, rgba(255, 255, 255, 0.98) 0%, rgba(167, 232, 255, 0.92) 34%, rgba(216, 180, 254, 0.94) 68%, rgba(255, 255, 255, 0.92) 100%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        font-family:
+          "Clash Display",
+          "Geist",
+          "Noto Serif SC",
+          "Microsoft YaHei",
+          sans-serif;
+        font-size: clamp(48px, 8.6vw, 142px);
+        font-weight: 520;
+        line-height: 0.82;
+        letter-spacing: 0;
+        text-shadow:
+          0 1px 0 rgba(255, 255, 255, 0.12),
+          0 0 42px rgba(139, 233, 255, 0.18),
+          0 32px 110px rgba(0, 0, 0, 0.78);
+      }
+
+      .control-panel {
+        position: fixed;
+        top: 28px;
+        right: 28px;
+        z-index: 4;
+        width: min(338px, calc(100vw - 36px));
+        min-height: 250px;
+        padding: 0 0 0 58px;
+        color: rgba(244, 239, 226, 0.84);
+        font-family:
+          "Geist",
+          "Plus Jakarta Sans",
+          "Microsoft YaHei",
+          "Noto Sans SC",
+          sans-serif;
+        transform: translateX(0);
+        animation: panelReveal 900ms var(--motion) 70ms both;
+        transition: transform 680ms var(--motion);
+      }
+
+      .control-panel.is-collapsed {
+        transform: translateX(calc(100% - 50px));
+      }
+
+      .panel-toggle {
+        position: absolute;
+        top: 0;
+        left: 0;
+        display: grid;
+        place-items: center;
+        width: 50px;
+        height: 100%;
+        color: rgba(246, 251, 255, 0.78);
+        background:
+          linear-gradient(180deg, rgba(22, 31, 49, 0.46), rgba(6, 11, 21, 0.5)) padding-box,
+          linear-gradient(170deg, rgba(139, 233, 255, 0.46), rgba(216, 180, 254, 0.24), rgba(255, 255, 255, 0.05)) border-box;
+        border: 0;
+        border: 1px solid transparent;
+        border-right: 0;
+        border-radius: 28px 0 0 28px;
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.28),
+          inset 0 -20px 46px rgba(139, 233, 255, 0.035),
+          -18px 28px 80px rgba(0, 0, 0, 0.34);
+        backdrop-filter: blur(22px) saturate(150%);
+        -webkit-backdrop-filter: blur(22px) saturate(150%);
+        cursor: pointer;
+        font-size: 24px;
+        line-height: 1;
+        transition:
+          color 520ms var(--motion),
+          background 520ms var(--motion),
+          transform 520ms var(--motion);
+      }
+
+      .panel-toggle:hover {
+        color: rgba(255, 255, 255, 0.98);
+        background:
+          linear-gradient(180deg, rgba(31, 43, 67, 0.58), rgba(7, 14, 26, 0.58)) padding-box,
+          linear-gradient(170deg, rgba(139, 233, 255, 0.7), rgba(216, 180, 254, 0.38), rgba(167, 243, 208, 0.2)) border-box;
+      }
+
+      .control-panel.is-collapsed .panel-toggle span {
+        transform: rotate(180deg);
+      }
+
+      .panel-toggle span {
+        display: block;
+        transition: transform 680ms var(--motion);
+      }
+
+      .panel-content {
+        position: relative;
+        min-height: 100%;
+        padding: 18px 18px 20px;
+        background:
+          linear-gradient(152deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.035) 34%, rgba(7, 13, 25, 0.5) 100%) padding-box,
+          linear-gradient(145deg, rgba(139, 233, 255, 0.42), rgba(255, 255, 255, 0.08) 34%, rgba(216, 180, 254, 0.34) 70%, rgba(167, 243, 208, 0.18)) border-box;
+        border: 1px solid transparent;
+        border-radius: 28px;
+        box-shadow:
+          inset 0 1px 1px rgba(255, 255, 255, 0.32),
+          inset 0 -34px 82px rgba(139, 233, 255, 0.045),
+          inset 0 0 0 1px rgba(255, 255, 255, 0.035),
+          0 34px 110px rgba(0, 0, 0, 0.38),
+          0 0 70px rgba(139, 233, 255, 0.08);
+        backdrop-filter: blur(28px) saturate(160%);
+        -webkit-backdrop-filter: blur(28px) saturate(160%);
+        transition:
+          opacity 520ms var(--motion),
+          transform 680ms var(--motion);
+      }
+
+      .panel-content::before {
+        position: absolute;
+        inset: 1px 1px auto;
+        height: 42%;
+        pointer-events: none;
+        content: "";
+        border-radius: 27px 27px 18px 18px;
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.18), transparent);
+        opacity: 0.5;
+      }
+
+      .control-panel.is-collapsed .panel-content {
+        pointer-events: none;
+        opacity: 0;
+        transform: translateX(18px) scale(0.985);
+      }
+
+      .panel-kicker {
+        display: inline-flex;
+        margin: 0 0 10px;
+        padding: 5px 9px;
+        color: rgba(167, 232, 255, 0.74);
+        background: rgba(139, 233, 255, 0.07);
+        border: 1px solid rgba(139, 233, 255, 0.14);
+        border-radius: 999px;
+        font-size: 10px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+      }
+
+      .panel-title {
+        margin: 0 0 20px;
+        color: rgba(246, 251, 255, 0.96);
+        font-family:
+          "Clash Display",
+          "Geist",
+          "Microsoft YaHei",
+          sans-serif;
+        font-size: 22px;
+        font-weight: 560;
+        letter-spacing: 0;
+      }
+
+      .control-row {
+        display: grid;
+        gap: 9px;
+        padding: 16px 0;
+        border-top: 1px solid rgba(196, 232, 255, 0.12);
+      }
+
+      .control-label {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        color: rgba(246, 251, 255, 0.82);
+        font-size: 13px;
+      }
+
+      .control-value {
+        color: rgba(167, 232, 255, 0.56);
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .value-input {
+        display: inline-grid;
+        grid-template-columns: 58px auto;
+        align-items: center;
+        gap: 6px;
+        color: rgba(167, 232, 255, 0.56);
+        font-size: 12px;
+      }
+
+      .value-input input {
+        width: 58px;
+        padding: 5px 7px;
+        color: rgba(246, 251, 255, 0.92);
+        background:
+          linear-gradient(rgba(255, 255, 255, 0.095), rgba(255, 255, 255, 0.035)) padding-box,
+          linear-gradient(145deg, rgba(139, 233, 255, 0.34), rgba(216, 180, 254, 0.16)) border-box;
+        border: 1px solid transparent;
+        border-radius: 10px;
+        outline: none;
+        font: inherit;
+        font-variant-numeric: tabular-nums;
+        transition:
+          background 520ms var(--motion),
+          box-shadow 520ms var(--motion);
+      }
+
+      .value-input input:focus {
+        background: rgba(255, 255, 255, 0.12);
+        box-shadow:
+          0 0 0 4px rgba(139, 233, 255, 0.12),
+          0 0 26px rgba(216, 180, 254, 0.12);
+      }
+
+      .color-control {
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+      }
+
+      .color-control input[type="color"] {
+        width: 34px;
+        height: 28px;
+        padding: 0;
+        overflow: hidden;
+        background: transparent;
+        border: 1px solid rgba(139, 233, 255, 0.25);
+        border-radius: 10px;
+        box-shadow: 0 0 22px rgba(139, 233, 255, 0.08);
+        cursor: pointer;
+      }
+
+      .color-control input[type="color"]::-webkit-color-swatch-wrapper {
+        padding: 0;
+      }
+
+      .color-control input[type="color"]::-webkit-color-swatch {
+        border: 0;
+      }
+
+      .control-row input[type="range"] {
+        appearance: none;
+        width: 100%;
+        height: 18px;
+        margin: 0;
+        accent-color: var(--lumen);
+        background: transparent;
+        cursor: pointer;
+      }
+
+      .control-row input[type="range"]::-webkit-slider-runnable-track {
+        height: 6px;
+        background:
+          linear-gradient(90deg, rgba(139, 233, 255, 0.72), rgba(216, 180, 254, 0.62), rgba(167, 243, 208, 0.5)),
+          rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 999px;
+        box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.16);
+      }
+
+      .control-row input[type="range"]::-webkit-slider-thumb {
+        appearance: none;
+        width: 18px;
+        height: 18px;
+        margin-top: -7px;
+        background:
+          linear-gradient(145deg, rgba(255, 255, 255, 0.96), rgba(167, 232, 255, 0.86));
+        border: 1px solid rgba(255, 255, 255, 0.82);
+        border-radius: 50%;
+        box-shadow:
+          0 0 0 5px rgba(139, 233, 255, 0.09),
+          0 8px 22px rgba(0, 0, 0, 0.36);
+      }
+
+      .control-row input[type="range"]::-moz-range-track {
+        height: 6px;
+        background: linear-gradient(90deg, rgba(139, 233, 255, 0.72), rgba(216, 180, 254, 0.62), rgba(167, 243, 208, 0.5));
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 999px;
+      }
+
+      .control-row input[type="range"]::-moz-range-thumb {
+        width: 18px;
+        height: 18px;
+        background: rgba(246, 251, 255, 0.94);
+        border: 1px solid rgba(255, 255, 255, 0.82);
+        border-radius: 50%;
+      }
+
+      .curve-editor {
+        width: 100%;
+        height: 112px;
+        overflow: visible;
+        touch-action: none;
+        cursor: crosshair;
+        padding: 4px;
+        background:
+          linear-gradient(152deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.025)) padding-box,
+          linear-gradient(145deg, rgba(139, 233, 255, 0.3), rgba(216, 180, 254, 0.12), rgba(167, 243, 208, 0.1)) border-box;
+        border: 1px solid transparent;
+        border-radius: 18px;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+      }
+
+      .curve-editor .grid-line {
+        stroke: rgba(196, 232, 255, 0.12);
+        stroke-width: 1;
+      }
+
+      .curve-editor .axis-line {
+        stroke: rgba(196, 232, 255, 0.26);
+        stroke-width: 1.2;
+      }
+
+      .curve-editor .curve-fill {
+        fill: rgba(139, 233, 255, 0.12);
+      }
+
+      .curve-editor .curve-path {
+        fill: none;
+        stroke: rgba(167, 232, 255, 0.92);
+        stroke-width: 2.4;
+        stroke-linecap: round;
+        filter: drop-shadow(0 0 8px rgba(139, 233, 255, 0.34));
+      }
+
+      .curve-editor .curve-handle {
+        fill: #f6fbff;
+        stroke: rgba(139, 233, 255, 0.72);
+        stroke-width: 2;
+        cursor: grab;
+        filter:
+          drop-shadow(0 0 10px rgba(139, 233, 255, 0.42))
+          drop-shadow(0 8px 18px rgba(0, 0, 0, 0.32));
+      }
+
+      .curve-editor .curve-handle:active {
+        cursor: grabbing;
+      }
+
+      .curve-hint {
+        display: flex;
+        justify-content: space-between;
+        color: rgba(167, 232, 255, 0.42);
+        font-size: 10px;
+        line-height: 1;
+      }
+
+      @keyframes revealLift {
+        from {
+          opacity: 0;
+          transform: translateY(18px) scale(0.985);
+          filter: blur(8px);
+        }
+
+        to {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+          filter: blur(0);
+        }
+      }
+
+      @keyframes panelReveal {
+        from {
+          opacity: 0;
+          filter: blur(8px);
+        }
+
+        to {
+          opacity: 1;
+          filter: blur(0);
+        }
+      }
+
+      @keyframes liquidShift {
+        from {
+          transform: translate3d(-2%, -1%, 0) scale(1.08);
+          filter: blur(26px) saturate(140%) hue-rotate(0deg);
+        }
+
+        to {
+          transform: translate3d(2%, 1%, 0) scale(1.12);
+          filter: blur(30px) saturate(170%) hue-rotate(18deg);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation-duration: 1ms !important;
+          animation-iteration-count: 1 !important;
+          scroll-behavior: auto !important;
+          transition-duration: 1ms !important;
+        }
+      }
+
+      @media (max-width: 720px) {
+        .title {
+          top: 32px;
+          left: 30px;
+          max-width: calc(100vw - 60px);
+        }
+
+        .title h1 {
+          font-size: clamp(42px, 16vw, 86px);
+        }
+
+        .control-panel {
+          top: 20px;
+          right: 18px;
+          width: min(300px, calc(100vw - 28px));
+          padding-left: 56px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <svg class="map-linework" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+      <path class="artery" d="M-60 780 C190 690 328 632 560 606 C760 584 890 500 1050 372 C1204 250 1338 168 1660 126" />
+      <path class="artery" d="M188 -40 C236 176 270 314 344 452 C438 626 538 718 672 1060" />
+      <path class="road" d="M-40 238 C210 230 376 214 548 160 C738 100 888 94 1136 136 C1308 166 1458 180 1648 154" />
+      <path class="road" d="M28 474 C186 436 338 426 514 466 C732 516 890 534 1080 490 C1260 448 1398 430 1636 462" />
+      <path class="road" d="M92 948 C278 846 434 794 620 776 C806 758 934 812 1126 820 C1312 828 1442 772 1606 676" />
+      <path class="road" d="M734 -42 C714 128 718 272 766 426 C818 596 816 746 768 1040" />
+      <path class="road" d="M1222 -30 C1180 130 1158 286 1180 452 C1208 660 1218 818 1170 1044" />
+      <path class="lane" d="M44 80 L318 68 L540 98 L676 70 L892 86 L1028 52 L1244 76 L1518 42" />
+      <path class="lane" d="M58 348 L226 324 L392 348 L570 312 L728 336 L884 292 L1046 310 L1234 278 L1516 304" />
+      <path class="lane" d="M92 628 L250 582 L412 600 L560 558 L722 588 L904 548 L1068 574 L1248 538 L1514 556" />
+      <path class="lane" d="M140 868 L306 822 L478 858 L632 826 L824 872 L1006 850 L1188 894 L1398 836" />
+      <path class="lane" d="M118 0 L140 184 L118 350 L154 514 L132 716 L170 1006" />
+      <path class="lane" d="M478 -28 L506 128 L492 292 L532 454 L498 618 L536 812 L514 1036" />
+      <path class="lane" d="M976 -34 L942 128 L980 286 L952 448 L1002 628 L968 806 L1018 1034" />
+      <path class="lane" d="M1410 -18 L1374 154 L1416 330 L1382 492 L1434 672 L1392 848 L1442 1024" />
+      <g>
+        <rect class="block" x="210" y="104" width="172" height="128" rx="7" transform="rotate(-5 296 168)" />
+        <rect class="block" x="422" y="92" width="118" height="166" rx="7" transform="rotate(9 481 175)" />
+        <rect class="block" x="834" y="132" width="210" height="116" rx="7" transform="rotate(5 939 190)" />
+        <rect class="block" x="1122" y="176" width="168" height="142" rx="7" transform="rotate(-8 1206 247)" />
+        <rect class="block" x="240" y="372" width="194" height="128" rx="7" transform="rotate(8 337 436)" />
+        <rect class="block" x="604" y="388" width="126" height="152" rx="7" transform="rotate(-6 667 464)" />
+        <rect class="block" x="868" y="356" width="176" height="128" rx="7" transform="rotate(7 956 420)" />
+        <rect class="block" x="1266" y="342" width="176" height="136" rx="7" transform="rotate(4 1354 410)" />
+        <rect class="block" x="210" y="650" width="186" height="130" rx="7" transform="rotate(-10 303 715)" />
+        <rect class="block" x="548" y="630" width="160" height="138" rx="7" transform="rotate(6 628 699)" />
+        <rect class="block" x="856" y="662" width="196" height="124" rx="7" transform="rotate(-5 954 724)" />
+        <rect class="block" x="1230" y="608" width="190" height="150" rx="7" transform="rotate(8 1325 683)" />
+      </g>
+    </svg>
+    <canvas id="mapCanvas" aria-hidden="true"></canvas>
+    <canvas id="smokeCanvas" aria-label="click smoke canvas"></canvas>
+
+    <section class="title" aria-hidden="true">
+      <h1>Smoke<br />Bloom</h1>
+    </section>
+
+    <aside class="control-panel" id="controlPanel" aria-label="烟雾参数">
+      <button class="panel-toggle" id="panelToggle" type="button" aria-label="收起侧边栏" title="收起侧边栏">
+        <span aria-hidden="true">›</span>
+      </button>
+      <div class="panel-content">
+        <p class="panel-kicker">smoke controls</p>
+        <h2 class="panel-title">烟雾参数</h2>
+
+        <label class="control-row" for="smokeSize">
+          <span class="control-label">
+            <span>雾气大小</span>
+            <span class="control-value" id="smokeSizeValue">1.0x</span>
+          </span>
+          <input id="smokeSize" type="range" min="60" max="180" value="100" step="5" />
+        </label>
+
+        <label class="control-row" for="smokeLife">
+          <span class="control-label">
+            <span>停留时间</span>
+            <span class="value-input">
+              <input id="smokeLifeSeconds" type="number" min="1.5" max="30" value="9.4" step="0.1" aria-label="停留时间秒数" />
+              <span>s</span>
+            </span>
+          </span>
+          <input id="smokeLife" type="range" min="20" max="320" value="100" step="5" />
+        </label>
+
+        <label class="control-row" for="smokeDensity">
+          <span class="control-label">
+            <span>雾气浓度</span>
+            <span class="control-value" id="smokeDensityValue">1.0x</span>
+          </span>
+          <input id="smokeDensity" type="range" min="40" max="190" value="100" step="5" />
+        </label>
+
+        <div class="control-row">
+          <span class="control-label">
+            <span>消散速度曲线</span>
+            <span class="control-value" id="smokeFalloffValue">曲线</span>
+          </span>
+          <svg class="curve-editor" id="falloffCurveEditor" viewBox="0 0 230 112" aria-label="消散速度曲线编辑器" role="img">
+            <line class="grid-line" x1="16" y1="50" x2="214" y2="50" />
+            <line class="grid-line" x1="82" y1="14" x2="82" y2="88" />
+            <line class="grid-line" x1="148" y1="14" x2="148" y2="88" />
+            <line class="axis-line" x1="16" y1="88" x2="214" y2="88" />
+            <line class="axis-line" x1="16" y1="88" x2="16" y2="14" />
+            <path class="curve-fill" id="falloffCurveFill" d="" />
+            <path class="curve-path" id="falloffCurvePath" d="" />
+            <circle class="curve-handle" id="falloffCurveHandle" cx="0" cy="0" r="7" />
+          </svg>
+          <div class="curve-hint" aria-hidden="true">
+            <span>中心</span>
+            <span>边缘</span>
+          </div>
+        </div>
+
+        <label class="control-row" for="smokeColor">
+          <span class="control-label">
+            <span>烟雾颜色</span>
+            <span class="color-control">
+              <input id="smokeColor" type="color" value="#d8d4c1" aria-label="烟雾颜色" />
+              <span class="control-value" id="smokeColorValue">#d8d4c1</span>
+            </span>
+          </span>
+        </label>
+      </div>
+    </aside>
+
+    <script>
+      const mapCanvas = document.querySelector("#mapCanvas");
+      const mapCtx = mapCanvas.getContext("2d", { alpha: true });
+      const canvas = document.querySelector("#smokeCanvas");
+      const ctx = canvas.getContext("2d", { alpha: true });
+      const smokeTexture = document.createElement("canvas");
+      const textureCtx = smokeTexture.getContext("2d");
+      const controlPanel = document.querySelector("#controlPanel");
+      const panelToggle = document.querySelector("#panelToggle");
+      const controls = {
+        smokeSize: document.querySelector("#smokeSize"),
+        smokeLife: document.querySelector("#smokeLife"),
+        smokeLifeSeconds: document.querySelector("#smokeLifeSeconds"),
+        smokeDensity: document.querySelector("#smokeDensity"),
+        smokeColor: document.querySelector("#smokeColor"),
+      };
+      const controlValues = {
+        smokeSize: document.querySelector("#smokeSizeValue"),
+        smokeDensity: document.querySelector("#smokeDensityValue"),
+        smokeFalloff: document.querySelector("#smokeFalloffValue"),
+        smokeColor: document.querySelector("#smokeColorValue"),
+      };
+      const falloffCurve = {
+        editor: document.querySelector("#falloffCurveEditor"),
+        path: document.querySelector("#falloffCurvePath"),
+        fill: document.querySelector("#falloffCurveFill"),
+        handle: document.querySelector("#falloffCurveHandle"),
+      };
+
+      let width = 0;
+      let height = 0;
+      let dpr = 1;
+      let particles = [];
+      let smokeHotspots = [];
+      let lastTime = performance.now();
+      let isPanning = false;
+      const camera = { x: 0, y: 0 };
+      const panStart = { x: 0, y: 0, cameraX: 0, cameraY: 0 };
+      const MAX_PARTICLES = 760;
+      const HARD_PARTICLE_LIMIT = 920;
+      const DEFAULT_LIFE_SECONDS = 9.4;
+      const MAP_BLOCK_SIZE = 210;
+      const SMOKE_TILE_SIZE = 180;
+      const SMOKE_TEXTURE_VARIANTS = 5;
+      const HOTSPOT_RADIUS = 120;
+      const HOTSPOT_MAX = 3.2;
+      const HOTSPOT_TTL = 22000;
+      const particlePool = [];
+      const smokeSettings = {
+        size: 1,
+        life: 1,
+        density: 1,
+        falloffCurve: { x: 0.58, y: 0.46 },
+        color: "#d8d4c1",
+        colorRgb: { r: 216, g: 212, b: 193 },
+      };
+
+      const rand = (min, max) => min + Math.random() * (max - min);
+      const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+      const mix = (a, b, amount) => Math.round(clamp(a + (b - a) * amount, 0, 255));
+
+      function hexToRgb(hex) {
+        const normalized = hex.replace("#", "");
+        const value = Number.parseInt(normalized, 16);
+        return {
+          r: (value >> 16) & 255,
+          g: (value >> 8) & 255,
+          b: value & 255,
+        };
+      }
+
+      function smokeColorStop(amount, alpha) {
+        const color = smokeSettings.colorRgb;
+        return `rgba(${mix(color.r, 245, amount)}, ${mix(color.g, 242, amount)}, ${mix(color.b, 226, amount)}, ${alpha})`;
+      }
+
+      function curveToSvgPoint(point) {
+        const left = 16;
+        const right = 214;
+        const top = 14;
+        const bottom = 88;
+        return {
+          x: left + point.x * (right - left),
+          y: bottom - point.y * (bottom - top),
+        };
+      }
+
+      function quadraticPoint(t) {
+        const start = { x: 0, y: 0 };
+        const control = smokeSettings.falloffCurve;
+        const end = { x: 1, y: 1 };
+        const inverse = 1 - t;
+
+        return {
+          x: inverse * inverse * start.x + 2 * inverse * t * control.x + t * t * end.x,
+          y: inverse * inverse * start.y + 2 * inverse * t * control.y + t * t * end.y,
+        };
+      }
+
+      function sampleFalloffCurve(input) {
+        const target = clamp(input, 0, 1);
+        let low = 0;
+        let high = 1;
+
+        for (let i = 0; i < 10; i += 1) {
+          const mid = (low + high) / 2;
+          if (quadraticPoint(mid).x < target) {
+            low = mid;
+          } else {
+            high = mid;
+          }
+        }
+
+        return clamp(quadraticPoint((low + high) / 2).y, 0, 1);
+      }
+
+      function renderFalloffCurve() {
+        const start = curveToSvgPoint({ x: 0, y: 0 });
+        const control = curveToSvgPoint(smokeSettings.falloffCurve);
+        const end = curveToSvgPoint({ x: 1, y: 1 });
+        const path = `M ${start.x} ${start.y} Q ${control.x} ${control.y} ${end.x} ${end.y}`;
+
+        falloffCurve.path.setAttribute("d", path);
+        falloffCurve.fill.setAttribute("d", `${path} L ${end.x} ${start.y} Z`);
+        falloffCurve.handle.setAttribute("cx", control.x);
+        falloffCurve.handle.setAttribute("cy", control.y);
+        controlValues.smokeFalloff.textContent = `${Math.round(smokeSettings.falloffCurve.y * 100)}%`;
+      }
+
+      function updateFalloffCurveFromPointer(event) {
+        const rect = falloffCurve.editor.getBoundingClientRect();
+        const x = clamp((event.clientX - rect.left - 16 * (rect.width / 230)) / (198 * (rect.width / 230)), 0.08, 0.92);
+        const y = clamp((88 * (rect.height / 112) - (event.clientY - rect.top)) / (74 * (rect.height / 112)), 0.05, 0.95);
+
+        smokeSettings.falloffCurve.x = x;
+        smokeSettings.falloffCurve.y = y;
+        renderFalloffCurve();
+      }
+
+      function resize() {
+        dpr = clamp(window.devicePixelRatio || 1, 1, 1.35);
+        width = window.innerWidth;
+        height = window.innerHeight;
+        mapCanvas.width = Math.floor(width * dpr);
+        mapCanvas.height = Math.floor(height * dpr);
+        mapCanvas.style.width = `${width}px`;
+        mapCanvas.style.height = `${height}px`;
+        canvas.width = Math.floor(width * dpr);
+        canvas.height = Math.floor(height * dpr);
+        canvas.style.width = `${width}px`;
+        canvas.style.height = `${height}px`;
+        mapCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        renderMap();
+      }
+
+      function applyCamera() {
+        renderMap();
+      }
+
+      function hashInt(x, y, salt = 0) {
+        let value = Math.imul(x, 374761393) ^ Math.imul(y, 668265263) ^ Math.imul(salt, 2246822519);
+        value = Math.imul(value ^ (value >>> 13), 1274126177);
+        return (value ^ (value >>> 16)) >>> 0;
+      }
+
+      function createRng(seed) {
+        let value = seed >>> 0;
+        return () => {
+          value += 0x6d2b79f5;
+          let t = value;
+          t = Math.imul(t ^ (t >>> 15), t | 1);
+          t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+          return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+      }
+
+      function roadPosition(index, axis) {
+        const jitter = (createRng(hashInt(index, axis === "x" ? 31 : 47, 5))() - 0.5) * 44;
+        return index * MAP_BLOCK_SIZE + jitter;
+      }
+
+      function roadWobble(primary, secondary, axis) {
+        const rng = createRng(hashInt(primary, secondary, axis === "x" ? 101 : 137));
+        return (rng() - 0.5) * 34;
+      }
+
+      function drawWorldPolyline(points, widthValue, color) {
+        if (points.length < 2) {
+          return;
+        }
+
+        mapCtx.beginPath();
+        mapCtx.moveTo(points[0].x + camera.x, points[0].y + camera.y);
+        for (let i = 1; i < points.length; i += 1) {
+          const prev = points[i - 1];
+          const point = points[i];
+          const cx = (prev.x + point.x) / 2 + camera.x;
+          const cy = (prev.y + point.y) / 2 + camera.y;
+          mapCtx.quadraticCurveTo(prev.x + camera.x, prev.y + camera.y, cx, cy);
+        }
+        const last = points[points.length - 1];
+        mapCtx.lineTo(last.x + camera.x, last.y + camera.y);
+        mapCtx.strokeStyle = color;
+        mapCtx.lineWidth = widthValue;
+        mapCtx.lineCap = "round";
+        mapCtx.lineJoin = "round";
+        mapCtx.stroke();
+      }
+
+      function renderMap() {
+        if (!width || !height) {
+          return;
+        }
+
+        mapCtx.clearRect(0, 0, width, height);
+
+        const margin = MAP_BLOCK_SIZE * 2;
+        const worldLeft = -camera.x - margin;
+        const worldRight = -camera.x + width + margin;
+        const worldTop = -camera.y - margin;
+        const worldBottom = -camera.y + height + margin;
+        const startCol = Math.floor(worldLeft / MAP_BLOCK_SIZE) - 2;
+        const endCol = Math.ceil(worldRight / MAP_BLOCK_SIZE) + 2;
+        const startRow = Math.floor(worldTop / MAP_BLOCK_SIZE) - 2;
+        const endRow = Math.ceil(worldBottom / MAP_BLOCK_SIZE) + 2;
+
+        for (let row = startRow; row < endRow; row += 1) {
+          for (let col = startCol; col < endCol; col += 1) {
+            const left = roadPosition(col, "x");
+            const right = roadPosition(col + 1, "x");
+            const top = roadPosition(row, "y");
+            const bottom = roadPosition(row + 1, "y");
+            const cellRng = createRng(hashInt(col, row, 211));
+            const inset = 18 + cellRng() * 24;
+            const gap = 12 + cellRng() * 22;
+            const split = cellRng() > 0.62;
+            const x = left + inset;
+            const y = top + inset;
+            const w = Math.max(24, right - left - inset * 2);
+            const h = Math.max(24, bottom - top - inset * 2);
+
+            mapCtx.save();
+            mapCtx.translate(x + camera.x, y + camera.y);
+            mapCtx.rotate((cellRng() - 0.5) * 0.04);
+            mapCtx.fillStyle = `rgba(139,233,255,${0.009 + cellRng() * 0.014})`;
+            mapCtx.strokeStyle = `rgba(168,215,255,${0.065 + cellRng() * 0.055})`;
+            mapCtx.lineWidth = 1.1;
+
+            if (split && w > 90 && h > 80) {
+              const verticalSplit = cellRng() > 0.5;
+              if (verticalSplit) {
+                const w1 = w * (0.42 + cellRng() * 0.16);
+                mapCtx.beginPath();
+                mapCtx.roundRect(0, 0, w1 - gap / 2, h, 5);
+                mapCtx.fill();
+                mapCtx.stroke();
+                mapCtx.beginPath();
+                mapCtx.roundRect(w1 + gap / 2, 0, w - w1 - gap / 2, h, 5);
+                mapCtx.fill();
+                mapCtx.stroke();
+              } else {
+                const h1 = h * (0.42 + cellRng() * 0.16);
+                mapCtx.beginPath();
+                mapCtx.roundRect(0, 0, w, h1 - gap / 2, 5);
+                mapCtx.fill();
+                mapCtx.stroke();
+                mapCtx.beginPath();
+                mapCtx.roundRect(0, h1 + gap / 2, w, h - h1 - gap / 2, 5);
+                mapCtx.fill();
+                mapCtx.stroke();
+              }
+            } else {
+              mapCtx.beginPath();
+              mapCtx.roundRect(0, 0, w, h, 6);
+              mapCtx.fill();
+              mapCtx.stroke();
+            }
+            mapCtx.restore();
+          }
+        }
+
+        for (let row = startRow; row <= endRow; row += 1) {
+          const yBase = roadPosition(row, "y");
+          const major = row % 4 === 0;
+          const points = [];
+          for (let col = startCol; col <= endCol; col += 1) {
+            points.push({
+              x: roadPosition(col, "x"),
+              y: yBase + roadWobble(row, col, "y"),
+            });
+          }
+          drawWorldPolyline(points, major ? 14 : 5, major ? "rgba(139,233,255,0.2)" : "rgba(196,232,255,0.13)");
+        }
+
+        for (let col = startCol; col <= endCol; col += 1) {
+          const xBase = roadPosition(col, "x");
+          const major = col % 5 === 0;
+          const points = [];
+          for (let row = startRow; row <= endRow; row += 1) {
+            points.push({
+              x: xBase + roadWobble(col, row, "x"),
+              y: roadPosition(row, "y"),
+            });
+          }
+          drawWorldPolyline(points, major ? 15 : 5, major ? "rgba(216,180,254,0.18)" : "rgba(196,232,255,0.12)");
+        }
+
+        for (let row = startRow; row <= endRow; row += 1) {
+          for (let col = startCol; col <= endCol; col += 1) {
+            const alleyRng = createRng(hashInt(col, row, 313));
+            if (alleyRng() < 0.42) {
+              continue;
+            }
+            const left = roadPosition(col, "x");
+            const right = roadPosition(col + 1, "x");
+            const top = roadPosition(row, "y");
+            const bottom = roadPosition(row + 1, "y");
+            const horizontal = alleyRng() > 0.5;
+            mapCtx.beginPath();
+            if (horizontal) {
+              const y = top + (bottom - top) * (0.35 + alleyRng() * 0.3);
+              mapCtx.moveTo(left + 38 + camera.x, y + camera.y);
+              mapCtx.lineTo(right - 38 + camera.x, y + (alleyRng() - 0.5) * 18 + camera.y);
+            } else {
+              const x = left + (right - left) * (0.35 + alleyRng() * 0.3);
+              mapCtx.moveTo(x + camera.x, top + 38 + camera.y);
+              mapCtx.lineTo(x + (alleyRng() - 0.5) * 18 + camera.x, bottom - 38 + camera.y);
+            }
+            mapCtx.strokeStyle = "rgba(167,232,255,0.08)";
+            mapCtx.lineWidth = 1.6;
+            mapCtx.lineCap = "round";
+            mapCtx.stroke();
+          }
+        }
+
+        const vignette = mapCtx.createRadialGradient(width / 2, height / 2, Math.min(width, height) * 0.15, width / 2, height / 2, Math.max(width, height) * 0.72);
+        vignette.addColorStop(0, "rgba(0,0,0,0)");
+        vignette.addColorStop(1, "rgba(1,4,12,0.58)");
+        mapCtx.fillStyle = vignette;
+        mapCtx.fillRect(0, 0, width, height);
+      }
+
+      function buildSmokeTexture() {
+        const size = SMOKE_TILE_SIZE;
+        smokeTexture.width = size * SMOKE_TEXTURE_VARIANTS;
+        smokeTexture.height = size;
+
+        textureCtx.clearRect(0, 0, smokeTexture.width, smokeTexture.height);
+
+        for (let tile = 0; tile < SMOKE_TEXTURE_VARIANTS; tile += 1) {
+          const origin = tile * size;
+          const center = size / 2;
+          const gradient = textureCtx.createRadialGradient(origin + center, center, 2, origin + center, center, center);
+          gradient.addColorStop(0, smokeColorStop(0.34, rand(0.34, 0.48)));
+          gradient.addColorStop(0.34, smokeColorStop(0.18, rand(0.16, 0.24)));
+          gradient.addColorStop(0.7, smokeColorStop(-0.12, rand(0.05, 0.09)));
+          gradient.addColorStop(1, `rgba(${smokeSettings.colorRgb.r}, ${smokeSettings.colorRgb.g}, ${smokeSettings.colorRgb.b}, 0)`);
+
+          textureCtx.fillStyle = gradient;
+          textureCtx.fillRect(origin, 0, size, size);
+
+          for (let cloud = 0; cloud < 7; cloud += 1) {
+            const x = origin + center + rand(-38, 38);
+            const y = center + rand(-34, 34);
+            const r = rand(24, 62);
+            const puff = textureCtx.createRadialGradient(x, y, 1, x, y, r);
+            puff.addColorStop(0, smokeColorStop(0.52, rand(0.04, 0.1)));
+            puff.addColorStop(1, smokeColorStop(0.52, 0));
+            textureCtx.fillStyle = puff;
+            textureCtx.fillRect(origin, 0, size, size);
+          }
+        }
+      }
+
+      function registerSmokeHotspot(x, y) {
+        const now = performance.now();
+        smokeHotspots = smokeHotspots.filter((spot) => now - spot.last < HOTSPOT_TTL);
+
+        let nearest = null;
+        let nearestDistance = Infinity;
+
+        for (const spot of smokeHotspots) {
+          const distance = Math.hypot(x - spot.x, y - spot.y);
+          if (distance < HOTSPOT_RADIUS && distance < nearestDistance) {
+            nearest = spot;
+            nearestDistance = distance;
+          }
+        }
+
+        if (!nearest) {
+          nearest = { x, y, strength: 1, last: now };
+          smokeHotspots.push(nearest);
+        } else {
+          const pull = 0.18;
+          nearest.x = nearest.x * (1 - pull) + x * pull;
+          nearest.y = nearest.y * (1 - pull) + y * pull;
+          nearest.strength = clamp(nearest.strength + 0.38, 1, HOTSPOT_MAX);
+          nearest.last = now;
+        }
+
+        return {
+          size: 1 + (nearest.strength - 1) * 0.24,
+          density: 1 + (nearest.strength - 1) * 0.32,
+          spread: 1 + (nearest.strength - 1) * 0.12,
+        };
+      }
+
+      function makeParticle(x, y, burstPower, localBoost) {
+        const angle = rand(0, Math.PI * 2);
+        const speed = rand(16, 150) * burstPower * localBoost.spread;
+        const turbulence = rand(-0.9, 0.9);
+        const radius = rand(38, 112) * burstPower * smokeSettings.size * localBoost.size;
+        const particle = particlePool.pop() ?? {};
+
+        particle.x = x + rand(-12, 12);
+        particle.y = y + rand(-12, 12);
+        particle.originX = x;
+        particle.originY = y;
+        particle.vx = Math.cos(angle) * speed + rand(-18, 18);
+        particle.vy = Math.sin(angle) * speed * 0.48 - rand(12, 42);
+        particle.drift = turbulence;
+        particle.radius = radius;
+        particle.baseRadius = radius;
+        particle.dissipationRadius = radius * rand(3.2, 5.4);
+        particle.maxLife = rand(7600, 11200) * smokeSettings.life;
+        particle.life = 0;
+        particle.fadeIn = rand(850, 1300) * Math.sqrt(smokeSettings.life);
+        particle.retireAt = null;
+        particle.alpha = rand(0.08, 0.22) * (0.72 + smokeSettings.density * 0.34) * localBoost.density;
+        particle.spin = rand(-0.02, 0.02);
+        particle.rotation = rand(0, Math.PI * 2);
+        particle.textureIndex = Math.floor(rand(0, SMOKE_TEXTURE_VARIANTS));
+
+        return particle;
+      }
+
+      function recycleParticle(particle) {
+        if (particlePool.length < HARD_PARTICLE_LIMIT) {
+          particlePool.push(particle);
+        }
+      }
+
+      function createSmoke(x, y) {
+        const localBoost = registerSmokeHotspot(x, y);
+        const burstPower = rand(0.86, 1.18);
+        const load = particles.length / MAX_PARTICLES;
+        const densityAmount = (0.55 + smokeSettings.density * 0.58) * localBoost.density;
+        const amount = Math.floor(rand(18, 30) * densityAmount * clamp(1 - load * 0.55, 0.38, 1));
+
+        for (let i = 0; i < amount; i += 1) {
+          particles.push(makeParticle(x, y, burstPower, localBoost));
+        }
+
+        if (particles.length > MAX_PARTICLES) {
+          const overflow = particles.length - MAX_PARTICLES;
+          for (let i = 0; i < overflow; i += 1) {
+            const particle = particles[i];
+            particle.retireAt = particle.retireAt ?? particle.life + rand(1800, 2800);
+          }
+        }
+
+        if (particles.length > HARD_PARTICLE_LIMIT) {
+          const overflow = particles.length - HARD_PARTICLE_LIMIT;
+          for (let i = 0; i < overflow; i += 1) {
+            const particle = particles[i];
+            particle.retireAt = Math.min(particle.retireAt ?? Infinity, particle.life + rand(450, 900));
+          }
+        }
+
+      }
+
+      function drawParticle(particle) {
+        const age = clamp(particle.life / particle.maxLife, 0, 1);
+        const distance = Math.hypot(particle.x - particle.originX, particle.y - particle.originY);
+        const rawDistanceRatio = distance / particle.dissipationRadius;
+        const curveValue = sampleFalloffCurve(rawDistanceRatio);
+        const outerPush = Math.max(0, rawDistanceRatio - 1) * 0.75;
+        const distanceFade = Math.exp(-(curveValue + outerPush) * 2.15);
+        const fadeIn = clamp(particle.life / particle.fadeIn, 0, 1);
+        const easedFadeIn = fadeIn * fadeIn * (3 - 2 * fadeIn);
+        const fadeOut = Math.max(0, 1 - age) ** 2.25;
+        const retireFade = particle.retireAt
+          ? clamp((particle.retireAt - particle.life) / 1800, 0, 1)
+          : 1;
+        const opacity = clamp(particle.alpha * easedFadeIn * fadeOut * retireFade * distanceFade, 0, 0.32);
+        const growthAge = Math.min(age, 0.72) / 0.72;
+        const easedGrowth = 1 - (1 - growthAge) ** 2;
+        const tailTighten = 1 - clamp((age - 0.82) / 0.18, 0, 1) * 0.08;
+        const radius = particle.baseRadius * (1 + easedGrowth * 3.15) * tailTighten;
+
+        if (opacity <= 0.001 || !Number.isFinite(opacity) || !Number.isFinite(radius)) {
+          return;
+        }
+
+        ctx.save();
+        ctx.translate(particle.x + camera.x, particle.y + camera.y);
+        ctx.rotate(particle.rotation);
+        const visualAge = Math.min(age, 0.82);
+        ctx.scale(1 + visualAge * 0.28, 0.72 + visualAge * 0.52);
+        ctx.globalCompositeOperation = "source-over";
+        ctx.globalAlpha = opacity;
+        ctx.drawImage(
+          smokeTexture,
+          particle.textureIndex * SMOKE_TILE_SIZE,
+          0,
+          SMOKE_TILE_SIZE,
+          SMOKE_TILE_SIZE,
+          -radius,
+          -radius,
+          radius * 2,
+          radius * 2,
+        );
+        ctx.restore();
+      }
+
+      function updateParticle(particle, delta) {
+        const seconds = delta / 1000;
+        const age = clamp(particle.life / particle.maxLife, 0, 1);
+        const distance = Math.hypot(particle.x - particle.originX, particle.y - particle.originY);
+        const rawDistanceRatio = distance / particle.dissipationRadius;
+        const curveValue = sampleFalloffCurve(rawDistanceRatio);
+        const outerPush = Math.max(0, rawDistanceRatio - 1) * 0.75;
+        const distanceDrain = (curveValue + outerPush) * 1.05;
+        const swirl = Math.sin(particle.life * 0.002 + particle.drift * 6) * 24;
+
+        particle.x += (particle.vx + swirl * particle.drift) * seconds;
+        particle.y += particle.vy * seconds;
+        particle.vx *= 0.986;
+        particle.vy = particle.vy * 0.988 - 5.5 * seconds;
+        particle.rotation += particle.spin + particle.drift * 0.004 * (1 - age);
+        particle.life += delta * (1 + distanceDrain);
+      }
+
+      function isParticleAlive(particle) {
+        return particle.life < particle.maxLife && (!particle.retireAt || particle.life < particle.retireAt);
+      }
+
+      function render(now) {
+        const delta = Math.min(34, now - lastTime);
+        lastTime = now;
+
+        ctx.clearRect(0, 0, width, height);
+
+        let alive = 0;
+        for (let i = 0; i < particles.length; i += 1) {
+          const particle = particles[i];
+          updateParticle(particle, delta);
+          if (!isParticleAlive(particle)) {
+            recycleParticle(particle);
+            continue;
+          }
+          drawParticle(particle);
+          particles[alive] = particle;
+          alive += 1;
+        }
+        particles.length = alive;
+
+        requestAnimationFrame(render);
+      }
+
+      function pointerPosition(event) {
+        const touch = event.changedTouches?.[0];
+        return {
+          x: touch ? touch.clientX : event.clientX,
+          y: touch ? touch.clientY : event.clientY,
+        };
+      }
+
+      function screenToWorld(point) {
+        return {
+          x: point.x - camera.x,
+          y: point.y - camera.y,
+        };
+      }
+
+      function startPanning(event) {
+        isPanning = true;
+        panStart.x = event.clientX;
+        panStart.y = event.clientY;
+        panStart.cameraX = camera.x;
+        panStart.cameraY = camera.y;
+        document.body.classList.add("is-panning");
+        event.preventDefault();
+      }
+
+      function updatePanning(event) {
+        if (!isPanning) {
+          return;
+        }
+
+        camera.x = panStart.cameraX + event.clientX - panStart.x;
+        camera.y = panStart.cameraY + event.clientY - panStart.y;
+        applyCamera();
+        event.preventDefault();
+      }
+
+      function stopPanning() {
+        if (!isPanning) {
+          return;
+        }
+
+        isPanning = false;
+        document.body.classList.remove("is-panning");
+      }
+
+      function updateControlValues(source = "slider") {
+        smokeSettings.size = Number(controls.smokeSize.value) / 100;
+        smokeSettings.density = Number(controls.smokeDensity.value) / 100;
+        smokeSettings.color = controls.smokeColor.value;
+        smokeSettings.colorRgb = hexToRgb(smokeSettings.color);
+
+        if (source === "seconds") {
+          const seconds = clamp(Number(controls.smokeLifeSeconds.value) || DEFAULT_LIFE_SECONDS, 1.5, 30);
+          smokeSettings.life = seconds / DEFAULT_LIFE_SECONDS;
+          controls.smokeLifeSeconds.value = seconds.toFixed(1);
+          controls.smokeLife.value = String(
+            Math.round(clamp(smokeSettings.life * 100, Number(controls.smokeLife.min), Number(controls.smokeLife.max))),
+          );
+        } else {
+          smokeSettings.life = Number(controls.smokeLife.value) / 100;
+          controls.smokeLifeSeconds.value = (DEFAULT_LIFE_SECONDS * smokeSettings.life).toFixed(1);
+        }
+
+        controlValues.smokeSize.textContent = `${smokeSettings.size.toFixed(1)}x`;
+        controlValues.smokeDensity.textContent = `${smokeSettings.density.toFixed(1)}x`;
+        controlValues.smokeColor.textContent = smokeSettings.color;
+      }
+
+      window.addEventListener("resize", resize);
+      window.addEventListener("auxclick", (event) => {
+        if (event.button === 1) {
+          event.preventDefault();
+        }
+      });
+      controlPanel.addEventListener("pointerdown", (event) => {
+        event.stopPropagation();
+      });
+      panelToggle.addEventListener("click", () => {
+        const collapsed = controlPanel.classList.toggle("is-collapsed");
+        panelToggle.setAttribute("aria-label", collapsed ? "展开侧边栏" : "收起侧边栏");
+        panelToggle.setAttribute("title", collapsed ? "展开侧边栏" : "收起侧边栏");
+      });
+      [controls.smokeSize, controls.smokeLife, controls.smokeDensity].forEach((control) => {
+        control.addEventListener("input", () => updateControlValues("slider"));
+      });
+      falloffCurve.editor.addEventListener("pointerdown", (event) => {
+        updateFalloffCurveFromPointer(event);
+        falloffCurve.editor.setPointerCapture(event.pointerId);
+        event.preventDefault();
+      });
+      falloffCurve.editor.addEventListener("pointermove", (event) => {
+        if (event.buttons !== 1) {
+          return;
+        }
+
+        updateFalloffCurveFromPointer(event);
+        event.preventDefault();
+      });
+      controls.smokeColor.addEventListener("input", () => {
+        updateControlValues("color");
+        buildSmokeTexture();
+      });
+      controls.smokeLifeSeconds.addEventListener("change", () => updateControlValues("seconds"));
+      controls.smokeLifeSeconds.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          updateControlValues("seconds");
+          controls.smokeLifeSeconds.blur();
+        }
+      });
+      window.addEventListener("pointerdown", (event) => {
+        if (event.button === 1) {
+          startPanning(event);
+          return;
+        }
+
+        if (event.button !== 0) {
+          return;
+        }
+
+        const point = pointerPosition(event);
+        const worldPoint = screenToWorld(point);
+        createSmoke(worldPoint.x, worldPoint.y);
+      });
+      window.addEventListener("pointermove", updatePanning);
+      window.addEventListener("pointerup", stopPanning);
+      window.addEventListener("pointercancel", stopPanning);
+
+      resize();
+      applyCamera();
+      updateControlValues();
+      renderFalloffCurve();
+      buildSmokeTexture();
+      createSmoke(width * 0.52 - camera.x, height * 0.58 - camera.y);
+      requestAnimationFrame(render);
+    </script>
+  </body>
+</html>
