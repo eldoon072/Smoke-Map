@@ -207,8 +207,8 @@
       }
 
       .control-panel::before {
-        inset: 0 0 0 calc(var(--toggle-width) - 1px);
-        border-radius: 0 var(--panel-radius) var(--panel-radius) var(--panel-radius);
+        inset: 0;
+        border-radius: var(--panel-radius);
       }
 
       .control-panel::after {
@@ -217,10 +217,15 @@
         width: calc(var(--toggle-width) + 1px);
         height: var(--toggle-height);
         border-radius: var(--panel-radius) 0 0 var(--panel-radius);
+        opacity: 0;
       }
 
       .control-panel.is-collapsed::before {
         opacity: 0;
+      }
+
+      .control-panel.is-collapsed::after {
+        opacity: 1;
       }
 
       .control-panel.is-collapsed {
