@@ -207,17 +207,18 @@
       }
 
       .control-panel::before {
-        inset: 0;
-        border-radius: var(--panel-radius);
+        inset: 0 0 0 var(--toggle-width);
+        border-left: 0;
+        border-radius: 0 var(--panel-radius) var(--panel-radius) var(--panel-radius);
       }
 
       .control-panel::after {
         top: 0;
         left: 0;
-        width: calc(var(--toggle-width) + 1px);
+        width: var(--toggle-width);
         height: var(--toggle-height);
+        border-right: 0;
         border-radius: var(--panel-radius) 0 0 var(--panel-radius);
-        opacity: 0;
       }
 
       .control-panel.is-collapsed::before {
