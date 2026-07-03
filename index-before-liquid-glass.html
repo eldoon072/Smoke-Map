@@ -170,6 +170,7 @@
         z-index: 4;
         width: min(338px, calc(100vw - 36px));
         min-height: 250px;
+        max-height: calc(100dvh - 56px);
         padding: 0 0 0 58px;
         color: rgba(244, 239, 226, 0.84);
         background:
@@ -234,13 +235,32 @@
 
       .panel-content {
         min-height: 100%;
+        max-height: calc(100dvh - 56px);
+        overflow-y: auto;
+        overscroll-behavior: contain;
         padding: 18px 18px 20px;
         background: transparent;
         border: 0;
         border-radius: 0 28px 28px 0;
+        scrollbar-color: rgba(244, 239, 226, 0.28) transparent;
+        scrollbar-width: thin;
+        -webkit-overflow-scrolling: touch;
         transition:
           opacity 520ms var(--motion),
           transform 680ms var(--motion);
+      }
+
+      .panel-content::-webkit-scrollbar {
+        width: 6px;
+      }
+
+      .panel-content::-webkit-scrollbar-thumb {
+        background: rgba(244, 239, 226, 0.22);
+        border-radius: 999px;
+      }
+
+      .panel-content::-webkit-scrollbar-track {
+        background: transparent;
       }
 
       .control-panel.is-collapsed .panel-content {
@@ -441,10 +461,17 @@
         }
 
         .control-panel {
-          top: 20px;
-          right: 18px;
-          width: min(300px, calc(100vw - 28px));
+          top: 16px;
+          right: 12px;
+          width: min(320px, calc(100vw - 24px));
+          max-height: calc(100dvh - 32px);
+          min-height: min(250px, calc(100dvh - 32px));
           padding-left: 56px;
+        }
+
+        .panel-content {
+          max-height: calc(100dvh - 32px);
+          padding: 18px 16px 20px;
         }
       }
     </style>
@@ -565,6 +592,7 @@
       const controlPanel = document.querySelector("#controlPanel");
       const panelToggle = document.querySelector("#panelToggle");
       const PANEL_REVEAL_ZONE = 96;
+      const touchPanelQuery = window.matchMedia("(max-width: 720px), (hover: none), (pointer: coarse)");
       const controls = {
         smokeSize: document.querySelector("#smokeSize"),
         smokeLife: document.querySelector("#smokeLife"),
@@ -1208,6 +1236,9 @@
       }
 
       function syncPanelWithPointer(event) {
+        if (touchPanelQuery.matches) {
+          return;
+        }
         setPanelCollapsed(!shouldRevealPanel(event));
       }
 
@@ -1216,9 +1247,15 @@
       });
       window.addEventListener("pointermove", syncPanelWithPointer);
       controlPanel.addEventListener("pointerenter", () => {
+        if (touchPanelQuery.matches) {
+          return;
+        }
         setPanelCollapsed(false);
       });
       controlPanel.addEventListener("pointerleave", (event) => {
+        if (touchPanelQuery.matches) {
+          return;
+        }
         if (event.clientX < window.innerWidth - PANEL_REVEAL_ZONE) {
           setPanelCollapsed(true);
         }
@@ -1228,6 +1265,9 @@
       });
       controlPanel.addEventListener("focusout", () => {
         requestAnimationFrame(() => {
+          if (touchPanelQuery.matches) {
+            return;
+          }
           if (!controlPanel.matches(":hover") && !controlPanel.contains(document.activeElement)) {
             setPanelCollapsed(true);
           }
@@ -1286,7 +1326,6 @@
       updateControlValues();
       renderFalloffCurve();
       buildSmokeTexture();
-      createSmoke(width * 0.52 - camera.x, height * 0.58 - camera.y);
       requestAnimationFrame(render);
     </script>
   </body>
