@@ -165,6 +165,8 @@
       }
 
       .control-panel {
+        --toggle-width: 96px;
+        --toggle-height: 92px;
         position: fixed;
         top: 28px;
         right: 28px;
@@ -172,7 +174,7 @@
         width: min(338px, calc(100vw - 36px));
         min-height: 250px;
         max-height: calc(100dvh - 56px);
-        padding: 0 0 0 58px;
+        padding: 0 0 0 var(--toggle-width);
         color: rgba(244, 239, 226, 0.84);
         background:
           linear-gradient(180deg, rgba(17, 18, 16, 0.9), rgba(9, 10, 9, 0.9)) padding-box,
@@ -196,7 +198,7 @@
       }
 
       .control-panel.is-collapsed {
-        transform: translateX(calc(100% - 50px));
+        transform: translateX(calc(100% - var(--toggle-width)));
       }
 
       .panel-toggle {
@@ -205,12 +207,12 @@
         left: 0;
         display: grid;
         place-items: center;
-        width: 50px;
-        height: 100%;
+        width: var(--toggle-width);
+        height: var(--toggle-height);
         color: rgba(244, 239, 226, 0.76);
         background: transparent;
         border: 0;
-        border-radius: 28px 0 0 28px;
+        border-radius: 28px 0 30px 28px;
         cursor: pointer;
         font-size: 24px;
         line-height: 1;
@@ -222,7 +224,8 @@
 
       .panel-toggle:hover {
         color: rgba(244, 239, 226, 0.98);
-        background: rgba(244, 239, 226, 0.055);
+        background:
+          linear-gradient(180deg, rgba(244, 239, 226, 0.075), rgba(244, 239, 226, 0.025));
       }
 
       .control-panel.is-collapsed .panel-toggle span {
@@ -303,37 +306,6 @@
         color: rgba(244, 239, 226, 0.5);
         font-size: 12px;
         font-variant-numeric: tabular-nums;
-      }
-
-      .value-input {
-        display: inline-grid;
-        grid-template-columns: 58px auto;
-        align-items: center;
-        gap: 6px;
-        color: rgba(244, 239, 226, 0.5);
-        font-size: 12px;
-      }
-
-      .value-input input {
-        width: 58px;
-        padding: 5px 7px;
-        color: rgba(244, 239, 226, 0.92);
-        background:
-          linear-gradient(rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.035)) padding-box,
-          linear-gradient(145deg, rgba(244, 239, 226, 0.18), rgba(244, 239, 226, 0.04)) border-box;
-        border: 1px solid transparent;
-        border-radius: 10px;
-        outline: none;
-        font: inherit;
-        font-variant-numeric: tabular-nums;
-        transition:
-          background 520ms var(--motion),
-          box-shadow 520ms var(--motion);
-      }
-
-      .value-input input:focus {
-        background: rgba(255, 255, 255, 0.1);
-        box-shadow: 0 0 0 4px rgba(216, 212, 193, 0.08);
       }
 
       .color-control {
@@ -462,12 +434,13 @@
         }
 
         .control-panel {
+          --toggle-width: 86px;
+          --toggle-height: 84px;
           top: 16px;
           right: 12px;
           width: min(320px, calc(100vw - 24px));
           max-height: calc(100dvh - 32px);
           min-height: min(250px, calc(100dvh - 32px));
-          padding-left: 56px;
         }
 
         .panel-content {
@@ -528,18 +501,15 @@
             <span>雾气大小</span>
             <span class="control-value" id="smokeSizeValue">1.0x</span>
           </span>
-          <input id="smokeSize" type="range" min="60" max="180" value="100" step="5" />
+          <input id="smokeSize" type="range" min="10" max="200" value="100" step="1" />
         </label>
 
         <label class="control-row" for="smokeLife">
           <span class="control-label">
             <span>停留时间</span>
-            <span class="value-input">
-              <input id="smokeLifeSeconds" type="number" min="1.5" max="30" value="9.4" step="0.1" aria-label="停留时间秒数" />
-              <span>s</span>
-            </span>
+            <span class="control-value" id="smokeLifeValue">9.4s</span>
           </span>
-          <input id="smokeLife" type="range" min="20" max="320" value="100" step="5" />
+          <input id="smokeLife" type="range" min="1" max="30" value="9.4" step="0.1" />
         </label>
 
         <label class="control-row" for="smokeDensity">
@@ -547,7 +517,7 @@
             <span>雾气浓度</span>
             <span class="control-value" id="smokeDensityValue">1.0x</span>
           </span>
-          <input id="smokeDensity" type="range" min="40" max="190" value="100" step="5" />
+          <input id="smokeDensity" type="range" min="10" max="200" value="100" step="1" />
         </label>
 
         <div class="control-row">
@@ -593,18 +563,18 @@
       const controlPanel = document.querySelector("#controlPanel");
       const panelToggle = document.querySelector("#panelToggle");
       const PANEL_REVEAL_ZONE = 96;
-      const LONG_PRESS_PAN_MS = 360;
+      const LONG_PRESS_PAN_MS = 100;
       const CLICK_MOVE_TOLERANCE = 10;
       const touchPanelQuery = window.matchMedia("(max-width: 720px), (hover: none), (pointer: coarse)");
       const controls = {
         smokeSize: document.querySelector("#smokeSize"),
         smokeLife: document.querySelector("#smokeLife"),
-        smokeLifeSeconds: document.querySelector("#smokeLifeSeconds"),
         smokeDensity: document.querySelector("#smokeDensity"),
         smokeColor: document.querySelector("#smokeColor"),
       };
       const controlValues = {
         smokeSize: document.querySelector("#smokeSizeValue"),
+        smokeLife: document.querySelector("#smokeLifeValue"),
         smokeDensity: document.querySelector("#smokeDensityValue"),
         smokeFalloff: document.querySelector("#smokeFalloffValue"),
         smokeColor: document.querySelector("#smokeColorValue"),
@@ -1267,25 +1237,18 @@
         stopPanning();
       }
 
-      function updateControlValues(source = "slider") {
+      function updateControlValues() {
         smokeSettings.size = Number(controls.smokeSize.value) / 100;
         smokeSettings.density = Number(controls.smokeDensity.value) / 100;
         smokeSettings.color = controls.smokeColor.value;
         smokeSettings.colorRgb = hexToRgb(smokeSettings.color);
 
-        if (source === "seconds") {
-          const seconds = clamp(Number(controls.smokeLifeSeconds.value) || DEFAULT_LIFE_SECONDS, 1.5, 30);
-          smokeSettings.life = seconds / DEFAULT_LIFE_SECONDS;
-          controls.smokeLifeSeconds.value = seconds.toFixed(1);
-          controls.smokeLife.value = String(
-            Math.round(clamp(smokeSettings.life * 100, Number(controls.smokeLife.min), Number(controls.smokeLife.max))),
-          );
-        } else {
-          smokeSettings.life = Number(controls.smokeLife.value) / 100;
-          controls.smokeLifeSeconds.value = (DEFAULT_LIFE_SECONDS * smokeSettings.life).toFixed(1);
-        }
+        const seconds = clamp(Number(controls.smokeLife.value) || DEFAULT_LIFE_SECONDS, 1, 30);
+        smokeSettings.life = seconds / DEFAULT_LIFE_SECONDS;
+        controls.smokeLife.value = seconds.toFixed(1);
 
         controlValues.smokeSize.textContent = `${smokeSettings.size.toFixed(1)}x`;
+        controlValues.smokeLife.textContent = `${seconds.toFixed(1)}s`;
         controlValues.smokeDensity.textContent = `${smokeSettings.density.toFixed(1)}x`;
         controlValues.smokeColor.textContent = smokeSettings.color;
       }
@@ -1377,13 +1340,6 @@
       controls.smokeColor.addEventListener("input", () => {
         updateControlValues("color");
         buildSmokeTexture();
-      });
-      controls.smokeLifeSeconds.addEventListener("change", () => updateControlValues("seconds"));
-      controls.smokeLifeSeconds.addEventListener("keydown", (event) => {
-        if (event.key === "Enter") {
-          updateControlValues("seconds");
-          controls.smokeLifeSeconds.blur();
-        }
       });
       window.addEventListener("pointerdown", (event) => {
         if (event.button === 1) {
