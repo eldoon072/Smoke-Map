@@ -587,8 +587,6 @@
       const mapCtx = mapCanvas.getContext("2d", { alpha: true });
       const canvas = document.querySelector("#smokeCanvas");
       const ctx = canvas.getContext("2d", { alpha: true });
-      const smokeTexture = document.createElement("canvas");
-      const textureCtx = smokeTexture.getContext("2d");
       const controlPanel = document.querySelector("#controlPanel");
       const panelToggle = document.querySelector("#panelToggle");
       const PANEL_REVEAL_ZONE = 96;
@@ -636,6 +634,7 @@
       const HOTSPOT_MAX = 3.2;
       const HOTSPOT_TTL = 22000;
       const particlePool = [];
+      const smokeTextureCache = new Map();
       const smokeSettings = {
         size: 1,
         life: 1,
@@ -659,8 +658,7 @@
         };
       }
 
-      function smokeColorStop(amount, alpha) {
-        const color = smokeSettings.colorRgb;
+      function smokeColorStop(amount, alpha, color = smokeSettings.colorRgb) {
         return `rgba(${mix(color.r, 245, amount)}, ${mix(color.g, 242, amount)}, ${mix(color.b, 226, amount)}, ${alpha})`;
       }
 
@@ -675,9 +673,9 @@
         };
       }
 
-      function quadraticPoint(t) {
+      function quadraticPoint(t, curve = smokeSettings.falloffCurve) {
         const start = { x: 0, y: 0 };
-        const control = smokeSettings.falloffCurve;
+        const control = curve;
         const end = { x: 1, y: 1 };
         const inverse = 1 - t;
 
@@ -687,21 +685,21 @@
         };
       }
 
-      function sampleFalloffCurve(input) {
+      function sampleFalloffCurve(input, curve = smokeSettings.falloffCurve) {
         const target = clamp(input, 0, 1);
         let low = 0;
         let high = 1;
 
         for (let i = 0; i < 10; i += 1) {
           const mid = (low + high) / 2;
-          if (quadraticPoint(mid).x < target) {
+          if (quadraticPoint(mid, curve).x < target) {
             low = mid;
           } else {
             high = mid;
           }
         }
 
-        return clamp(quadraticPoint((low + high) / 2).y, 0, 1);
+        return clamp(quadraticPoint((low + high) / 2, curve).y, 0, 1);
       }
 
       function renderFalloffCurve() {
@@ -931,21 +929,23 @@
         mapCtx.fillRect(0, 0, width, height);
       }
 
-      function buildSmokeTexture() {
+      function buildSmokeTexture(colorRgb = smokeSettings.colorRgb) {
         const size = SMOKE_TILE_SIZE;
-        smokeTexture.width = size * SMOKE_TEXTURE_VARIANTS;
-        smokeTexture.height = size;
+        const texture = document.createElement("canvas");
+        const textureCtx = texture.getContext("2d");
+        texture.width = size * SMOKE_TEXTURE_VARIANTS;
+        texture.height = size;
 
-        textureCtx.clearRect(0, 0, smokeTexture.width, smokeTexture.height);
+        textureCtx.clearRect(0, 0, texture.width, texture.height);
 
         for (let tile = 0; tile < SMOKE_TEXTURE_VARIANTS; tile += 1) {
           const origin = tile * size;
           const center = size / 2;
           const gradient = textureCtx.createRadialGradient(origin + center, center, 2, origin + center, center, center);
-          gradient.addColorStop(0, smokeColorStop(0.34, rand(0.34, 0.48)));
-          gradient.addColorStop(0.34, smokeColorStop(0.18, rand(0.16, 0.24)));
-          gradient.addColorStop(0.7, smokeColorStop(-0.12, rand(0.05, 0.09)));
-          gradient.addColorStop(1, `rgba(${smokeSettings.colorRgb.r}, ${smokeSettings.colorRgb.g}, ${smokeSettings.colorRgb.b}, 0)`);
+          gradient.addColorStop(0, smokeColorStop(0.34, rand(0.34, 0.48), colorRgb));
+          gradient.addColorStop(0.34, smokeColorStop(0.18, rand(0.16, 0.24), colorRgb));
+          gradient.addColorStop(0.7, smokeColorStop(-0.12, rand(0.05, 0.09), colorRgb));
+          gradient.addColorStop(1, `rgba(${colorRgb.r}, ${colorRgb.g}, ${colorRgb.b}, 0)`);
 
           textureCtx.fillStyle = gradient;
           textureCtx.fillRect(origin, 0, size, size);
@@ -955,12 +955,35 @@
             const y = center + rand(-34, 34);
             const r = rand(24, 62);
             const puff = textureCtx.createRadialGradient(x, y, 1, x, y, r);
-            puff.addColorStop(0, smokeColorStop(0.52, rand(0.04, 0.1)));
-            puff.addColorStop(1, smokeColorStop(0.52, 0));
+            puff.addColorStop(0, smokeColorStop(0.52, rand(0.04, 0.1), colorRgb));
+            puff.addColorStop(1, smokeColorStop(0.52, 0, colorRgb));
             textureCtx.fillStyle = puff;
             textureCtx.fillRect(origin, 0, size, size);
           }
         }
+
+        return texture;
+      }
+
+      function getSmokeTexture(color, colorRgb) {
+        if (!smokeTextureCache.has(color)) {
+          smokeTextureCache.set(color, buildSmokeTexture(colorRgb));
+        }
+
+        return smokeTextureCache.get(color);
+      }
+
+      function captureSmokeSettings() {
+        const colorRgb = { ...smokeSettings.colorRgb };
+        return {
+          size: smokeSettings.size,
+          life: smokeSettings.life,
+          density: smokeSettings.density,
+          falloffCurve: { ...smokeSettings.falloffCurve },
+          color: smokeSettings.color,
+          colorRgb,
+          texture: getSmokeTexture(smokeSettings.color, colorRgb),
+        };
       }
 
       function registerSmokeHotspot(x, y) {
@@ -996,11 +1019,11 @@
         };
       }
 
-      function makeParticle(x, y, burstPower, localBoost) {
+      function makeParticle(x, y, burstPower, localBoost, settings) {
         const angle = rand(0, Math.PI * 2);
         const speed = rand(16, 150) * burstPower * localBoost.spread;
         const turbulence = rand(-0.9, 0.9);
-        const radius = rand(38, 112) * burstPower * smokeSettings.size * localBoost.size;
+        const radius = rand(38, 112) * burstPower * settings.size * localBoost.size;
         const particle = particlePool.pop() ?? {};
 
         particle.x = x + rand(-12, 12);
@@ -1013,14 +1036,16 @@
         particle.radius = radius;
         particle.baseRadius = radius;
         particle.dissipationRadius = radius * rand(3.2, 5.4);
-        particle.maxLife = rand(7600, 11200) * smokeSettings.life;
+        particle.maxLife = rand(7600, 11200) * settings.life;
         particle.life = 0;
-        particle.fadeIn = rand(850, 1300) * Math.sqrt(smokeSettings.life);
+        particle.fadeIn = rand(850, 1300) * Math.sqrt(settings.life);
         particle.retireAt = null;
-        particle.alpha = rand(0.08, 0.22) * (0.72 + smokeSettings.density * 0.34) * localBoost.density;
+        particle.alpha = rand(0.08, 0.22) * (0.72 + settings.density * 0.34) * localBoost.density;
         particle.spin = rand(-0.02, 0.02);
         particle.rotation = rand(0, Math.PI * 2);
         particle.textureIndex = Math.floor(rand(0, SMOKE_TEXTURE_VARIANTS));
+        particle.texture = settings.texture;
+        particle.falloffCurve = { ...settings.falloffCurve };
 
         return particle;
       }
@@ -1032,14 +1057,15 @@
       }
 
       function createSmoke(x, y) {
+        const settings = captureSmokeSettings();
         const localBoost = registerSmokeHotspot(x, y);
         const burstPower = rand(0.86, 1.18);
         const load = particles.length / MAX_PARTICLES;
-        const densityAmount = (0.55 + smokeSettings.density * 0.58) * localBoost.density;
+        const densityAmount = (0.55 + settings.density * 0.58) * localBoost.density;
         const amount = Math.floor(rand(18, 30) * densityAmount * clamp(1 - load * 0.55, 0.38, 1));
 
         for (let i = 0; i < amount; i += 1) {
-          particles.push(makeParticle(x, y, burstPower, localBoost));
+          particles.push(makeParticle(x, y, burstPower, localBoost, settings));
         }
 
         if (particles.length > MAX_PARTICLES) {
@@ -1064,7 +1090,7 @@
         const age = clamp(particle.life / particle.maxLife, 0, 1);
         const distance = Math.hypot(particle.x - particle.originX, particle.y - particle.originY);
         const rawDistanceRatio = distance / particle.dissipationRadius;
-        const curveValue = sampleFalloffCurve(rawDistanceRatio);
+        const curveValue = sampleFalloffCurve(rawDistanceRatio, particle.falloffCurve);
         const outerPush = Math.max(0, rawDistanceRatio - 1) * 0.75;
         const distanceFade = Math.exp(-(curveValue + outerPush) * 2.15);
         const fadeIn = clamp(particle.life / particle.fadeIn, 0, 1);
@@ -1091,7 +1117,7 @@
         ctx.globalCompositeOperation = "source-over";
         ctx.globalAlpha = opacity;
         ctx.drawImage(
-          smokeTexture,
+          particle.texture,
           particle.textureIndex * SMOKE_TILE_SIZE,
           0,
           SMOKE_TILE_SIZE,
@@ -1109,7 +1135,7 @@
         const age = clamp(particle.life / particle.maxLife, 0, 1);
         const distance = Math.hypot(particle.x - particle.originX, particle.y - particle.originY);
         const rawDistanceRatio = distance / particle.dissipationRadius;
-        const curveValue = sampleFalloffCurve(rawDistanceRatio);
+        const curveValue = sampleFalloffCurve(rawDistanceRatio, particle.falloffCurve);
         const outerPush = Math.max(0, rawDistanceRatio - 1) * 0.75;
         const distanceDrain = (curveValue + outerPush) * 1.05;
         const swirl = Math.sin(particle.life * 0.002 + particle.drift * 6) * 24;
@@ -1391,7 +1417,6 @@
       });
       controls.smokeColor.addEventListener("input", () => {
         updateControlValues("color");
-        buildSmokeTexture();
       });
       window.addEventListener("pointerdown", (event) => {
         if (event.button === 1) {
@@ -1420,7 +1445,6 @@
       applyCamera();
       updateControlValues();
       renderFalloffCurve();
-      buildSmokeTexture();
       requestAnimationFrame(render);
     </script>
   </body>
