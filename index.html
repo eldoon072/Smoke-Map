@@ -594,6 +594,7 @@
       let lastTime = performance.now();
       let isPanning = false;
       let primaryPress = null;
+      let autoRevealPaused = false;
       const camera = { x: 0, y: 0 };
       const panStart = { x: 0, y: 0, cameraX: 0, cameraY: 0 };
       const MAX_PARTICLES = 760;
@@ -1275,14 +1276,21 @@
       function shouldRevealPanel(event) {
         return (
           event.clientX >= window.innerWidth - PANEL_REVEAL_ZONE ||
-          controlPanel.matches(":hover") ||
-          controlPanel.contains(document.activeElement)
+          controlPanel.matches(":hover")
         );
       }
 
       function syncPanelWithPointer(event) {
         if (touchPanelQuery.matches) {
           return;
+        }
+        if (autoRevealPaused) {
+          if (event.clientX < window.innerWidth - PANEL_REVEAL_ZONE && !controlPanel.matches(":hover")) {
+            autoRevealPaused = false;
+          } else {
+            setPanelCollapsed(true);
+            return;
+          }
         }
         setPanelCollapsed(!shouldRevealPanel(event));
       }
@@ -1295,17 +1303,26 @@
         if (touchPanelQuery.matches) {
           return;
         }
+        if (autoRevealPaused) {
+          return;
+        }
         setPanelCollapsed(false);
       });
       controlPanel.addEventListener("pointerleave", (event) => {
         if (touchPanelQuery.matches) {
           return;
         }
+        if (autoRevealPaused && event.clientX < window.innerWidth - PANEL_REVEAL_ZONE) {
+          autoRevealPaused = false;
+        }
         if (event.clientX < window.innerWidth - PANEL_REVEAL_ZONE) {
           setPanelCollapsed(true);
         }
       });
       controlPanel.addEventListener("focusin", () => {
+        if (touchPanelQuery.matches) {
+          return;
+        }
         setPanelCollapsed(false);
       });
       controlPanel.addEventListener("focusout", () => {
@@ -1319,7 +1336,13 @@
         });
       });
       panelToggle.addEventListener("click", () => {
-        setPanelCollapsed(!controlPanel.classList.contains("is-collapsed"));
+        const shouldCollapse = !controlPanel.classList.contains("is-collapsed");
+        setPanelCollapsed(shouldCollapse);
+        if (touchPanelQuery.matches) {
+          return;
+        }
+        autoRevealPaused = shouldCollapse;
+        panelToggle.blur();
       });
       [controls.smokeSize, controls.smokeLife, controls.smokeDensity].forEach((control) => {
         control.addEventListener("input", () => updateControlValues("slider"));
