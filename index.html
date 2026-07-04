@@ -598,6 +598,7 @@
       const PANEL_REVEAL_ZONE = 96;
       const LONG_PRESS_PAN_MS = 100;
       const CLICK_MOVE_TOLERANCE = 10;
+      const PAN_START_TOLERANCE = 3;
       const touchPanelQuery = window.matchMedia("(max-width: 720px), (hover: none), (pointer: coarse)");
       const controls = {
         smokeSize: document.querySelector("#smokeSize"),
@@ -1238,12 +1239,15 @@
           return;
         }
 
-        primaryPress.longPressed = true;
-        startPanning({
-          clientX: primaryPress.lastX,
-          clientY: primaryPress.lastY,
-          preventDefault() {},
-        });
+        primaryPress.longPressReady = true;
+        if (primaryPress.moved) {
+          primaryPress.longPressed = true;
+          startPanning({
+            clientX: primaryPress.lastX,
+            clientY: primaryPress.lastY,
+            preventDefault() {},
+          });
+        }
       }
 
       function beginPrimaryPress(event) {
@@ -1256,6 +1260,7 @@
           lastY: point.y,
           moved: false,
           longPressed: false,
+          longPressReady: false,
           worldPoint: screenToWorld(point),
           timer: window.setTimeout(startLongPressPan, LONG_PRESS_PAN_MS),
         };
@@ -1272,6 +1277,10 @@
         const distance = Math.hypot(point.x - primaryPress.startX, point.y - primaryPress.startY);
         if (distance > CLICK_MOVE_TOLERANCE) {
           primaryPress.moved = true;
+        }
+        if (primaryPress.longPressReady && !primaryPress.longPressed && distance > PAN_START_TOLERANCE) {
+          primaryPress.longPressed = true;
+          startPanning(event);
         }
       }
 
